@@ -1,0 +1,40 @@
+syntax = "proto3";
+import "google/protobuf/timestamp.proto";
+
+option go_package = ".;contractpb";
+
+
+message Message {
+  oneof body {
+    ChallengeRequest challengeRequest = 1;
+    ChallengeResponse challengeResponse = 2;
+    ServiceRequest serviceRequest = 3;
+    ServiceResponse serviceResponse = 4;
+  }
+}
+
+message ChallengeRequest {}
+
+message ChallengeResponse {
+  Puzzle puzzle = 1;
+}
+
+message ServiceRequest {
+  PuzzleSolution puzzleSolution = 1;
+}
+
+message ServiceResponse {
+  string quote = 1;
+}
+
+message Puzzle {
+  google.protobuf.Timestamp timestamp = 1;
+  bytes coveredPreImage = 2;
+  int32 coveredBitsCount = 3;
+  bytes hash = 4;
+}
+
+message PuzzleSolution {
+  google.protobuf.Timestamp timestamp = 1;
+  bytes  preImage = 2;
+}
