@@ -14,7 +14,7 @@ clean:
 	go mod tidy
 
 run-client: clean build
-	./$(BINARY_DIR)/$(CLIENT_BINARY_NAME)
+	SERVER_ADDR=127.0.0.1:3000 ./$(BINARY_DIR)/$(CLIENT_BINARY_NAME)
 
 run-server: clean build
-	./$(BINARY_DIR)/$(SERVER_BINARY_NAME)
+	./$(BINARY_DIR)/$(SERVER_BINARY_NAME) --config server.yaml

@@ -1,0 +1,11 @@
+address: "0.0.0.0:3000"
+difficulty: 26
+secretLength: 32
+challengeTimeout: "10s"
+quotes: [
+  "Underlying most arguments against the free market is a lack of belief in freedom itself. (c) Milton Friedman",
+  "Government's view of the economy could be summed up in a few short phrases: If it moves, tax it. If it keeps moving, regulate it. And if it stops moving, subsidize it. (с) Ronald Reagan",
+  "I would rather be exposed to the inconveniences attending too much liberty than those attending too small a degree of it. (c) Thomas Jefferson",
+  "If you put the federal government in charge of the Sahara Desert, in 5 years there'd be a shortage of sand. (c) Milton Friedman",
+  "It is hard to imagine a more stupid or more dangerous way of making decisions than by putting those decisions in the hands of people who pay no price for being wrong. (c) Thomas Sowell"
+]

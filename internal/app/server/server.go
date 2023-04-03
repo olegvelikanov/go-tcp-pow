@@ -14,23 +14,25 @@ const (
 )
 
 type Server struct {
-	port     int
 	listener net.Listener
 	app      Application
 }
 
-func StartServer(port int) (*Server, error) {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+func StartServer(config *Config) (*Server, error) {
+	listener, err := net.Listen("tcp", config.Address)
 	if err != nil {
 		return nil, err
 	}
+	app, err := NewApp(config)
+	if err != nil {
+		return nil, fmt.Errorf("creating app: %s", err)
+	}
 	s := &Server{
-		port:     port,
 		listener: listener,
-		app:      NewWordOfWisdomApp(),
+		app:      app,
 	}
 	go s.serve()
-	log.Printf("started tcp server serving at %d", s.port)
+	log.Printf("started tcp server serving at %s", config.Address)
 	return s, nil
 }
 

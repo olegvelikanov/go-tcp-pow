@@ -6,6 +6,7 @@ import (
 	"github.com/olegvelikanov/go-tcp-pow/internal/pkg/pow"
 	"log"
 	"net"
+	"time"
 )
 
 const (
@@ -14,8 +15,8 @@ const (
 
 var buf = make([]byte, connReadBufSize)
 
-func FetchQuote(port int) ([]byte, error) {
-	conn, err := net.Dial("tcp", fmt.Sprintf(":%d", port))
+func FetchQuote(addr string) ([]byte, error) {
+	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("connecting to remote: %s", err)
 	}
@@ -25,11 +26,14 @@ func FetchQuote(port int) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("requesting a challenge: %s", err)
 	}
+	log.Printf("received challenge with difficulty=%d", challenge.CoveredBitsCount)
 
+	t1 := time.Now()
 	solution, err := challenge.Solve()
 	if err != nil {
 		return nil, fmt.Errorf("solving the challenge: %s", err)
 	}
+	log.Printf("solved challenge by %s", time.Now().Sub(t1))
 
 	return requestService(conn, solution)
 }
