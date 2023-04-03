@@ -13,6 +13,9 @@ clean:
 	go clean
 	go mod tidy
 
+test:
+	go test ./...
+
 run-client: clean build
 	SERVER_ADDR=127.0.0.1:3000 ./$(BINARY_DIR)/$(CLIENT_BINARY_NAME)
 

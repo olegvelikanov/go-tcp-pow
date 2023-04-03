@@ -3,10 +3,12 @@ package server
 import (
 	"errors"
 	"fmt"
-	"github.com/olegvelikanov/go-tcp-pow/internal/pkg/contract"
 	"io"
 	"log"
 	"net"
+	"sync"
+
+	"github.com/olegvelikanov/go-tcp-pow/internal/pkg/contract"
 )
 
 const (
@@ -16,6 +18,7 @@ const (
 type Server struct {
 	listener net.Listener
 	app      Application
+	bufPool  sync.Pool
 }
 
 func StartServer(config *Config) (*Server, error) {
@@ -30,6 +33,12 @@ func StartServer(config *Config) (*Server, error) {
 	s := &Server{
 		listener: listener,
 		app:      app,
+		bufPool: sync.Pool{
+			New: func() any {
+				b := make([]byte, connReadBufSize)
+				return &b
+			},
+		},
 	}
 	go s.serve()
 	log.Printf("started tcp server serving at %s", config.Address)
@@ -97,13 +106,13 @@ func (s *Server) handleMessage(conn net.Conn, buf []byte) error {
 
 func (s *Server) onChallengeRequest(conn net.Conn, buf []byte, _ *contract.ChallengeRequest) error {
 	log.Printf("challenge requested")
-	puzzle := s.app.onChallengeRequest()
+	puzzle := s.app.OnChallengeRequest()
 	return s.sendResponse(conn, buf, &contract.ChallengeResponse{Puzzle: puzzle})
 }
 
 func (s *Server) onServiceRequest(conn net.Conn, buf []byte, request *contract.ServiceRequest) error {
 	log.Printf("service requested")
-	quote, err := s.app.onServiceRequest(request.PuzzleSolution)
+	quote, err := s.app.OnServiceRequest(request.PuzzleSolution)
 	if err != nil {
 		return fmt.Errorf("requesting service: %s", err)
 	}
@@ -135,12 +144,10 @@ func (s *Server) Stop() {
 	log.Printf("server is stopped")
 }
 
-// TODO: use sync.Pool here
-
 func (s *Server) getBuf() *[]byte {
-	bytes := make([]byte, connReadBufSize)
-	return &bytes
+	return s.bufPool.Get().(*[]byte)
 }
-func (s *Server) freeBuf(ptr *[]byte) {
 
+func (s *Server) freeBuf(ptr *[]byte) {
+	s.bufPool.Put(ptr)
 }

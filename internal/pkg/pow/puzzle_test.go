@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/benbjohnson/clock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -13,18 +14,19 @@ import (
 var (
 	secret   = generateSecret()
 	duration = 60 * time.Second
+	cl       = clock.New()
 )
 
 func TestPuzzle_Solve(t *testing.T) {
 	t.Run("should correctly solve puzzle", func(t *testing.T) {
-		puzzle := NewPuzzle(24, secret)
+		puzzle := NewPuzzle(24, secret, cl)
 		solution, err := puzzle.Solve()
 		assert.Nil(t, err)
-		require.True(t, solution.IsValid(secret, duration))
+		require.True(t, solution.IsValid(secret))
 	})
 
 	t.Run("should return error for unsolvable puzzle", func(t *testing.T) {
-		puzzle := NewPuzzle(24, secret)
+		puzzle := NewPuzzle(24, secret, cl)
 		puzzle.HashTwo = make([]byte, len(puzzle.HashTwo))
 		solution, err := puzzle.Solve()
 		require.Nil(t, solution)
@@ -40,7 +42,7 @@ func TestSolution_IsValid(t *testing.T) {
 			Timestamp: timestamp,
 			HashOne:   calculateHashOne(timestamp, []byte("secret")),
 		}
-		assert.True(t, solution.IsValid([]byte("secret"), duration))
+		assert.True(t, solution.IsValid([]byte("secret")))
 	})
 
 	t.Run("should return true if timestamps in different timezones", func(t *testing.T) {
@@ -50,7 +52,7 @@ func TestSolution_IsValid(t *testing.T) {
 			Timestamp: timestamp.In(loc1),
 			HashOne:   calculateHashOne(timestamp.In(loc2), []byte("secret")),
 		}
-		assert.True(t, solution.IsValid([]byte("secret"), duration))
+		assert.True(t, solution.IsValid([]byte("secret")))
 	})
 
 	t.Run("should return false for invalid solution", func(t *testing.T) {
@@ -58,7 +60,7 @@ func TestSolution_IsValid(t *testing.T) {
 			Timestamp: timestamp,
 			HashOne:   increment(calculateHashOne(timestamp, []byte("secret"))),
 		}
-		assert.False(t, solution.IsValid([]byte("secret"), duration))
+		assert.False(t, solution.IsValid([]byte("secret")))
 	})
 
 	t.Run("should return false on timeout", func(t *testing.T) {
@@ -66,7 +68,7 @@ func TestSolution_IsValid(t *testing.T) {
 			Timestamp: timestamp.Add(24 * time.Hour),
 			HashOne:   increment(calculateHashOne(timestamp, []byte("secret"))),
 		}
-		assert.False(t, solution.IsValid([]byte("secret"), duration))
+		assert.False(t, solution.IsValid([]byte("secret")))
 	})
 
 }

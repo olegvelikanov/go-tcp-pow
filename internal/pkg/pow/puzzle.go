@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"github.com/benbjohnson/clock"
 	"hash"
 	"time"
 )
@@ -23,8 +24,8 @@ type Solution struct {
 	HashOne   []byte
 }
 
-func NewPuzzle(bitsCount uint8, secret []byte) *Puzzle {
-	timestamp := time.Now()
+func NewPuzzle(bitsCount uint8, secret []byte, clock clock.Clock) *Puzzle {
+	timestamp := clock.Now()
 	hashOne := calculateHashOne(timestamp, secret)
 	hashTwo := calculateHash(hashOne)
 
@@ -51,19 +52,16 @@ func calculateHash(args ...[]byte) []byte {
 	return h.Sum(nil)
 }
 
-func coverTrailingBits(original []byte, bitsToReset int) []byte {
-	result := make([]byte, len(original))
-	idx := len(original) - 1 - (bitsToReset / 8)
-	for i := range result {
-		if i < idx {
-			result[i] = original[i]
-		} else if i > idx {
-			result[i] = 0
-		} else {
-			result[i] = (original[i] >> (bitsToReset % 8)) << (bitsToReset % 8)
+func coverTrailingBits(bytes []byte, bitsToReset int) []byte {
+	idx := len(bytes) - 1 - (bitsToReset / 8)
+	for i := range bytes {
+		if i > idx {
+			bytes[i] = 0
+		} else if i == idx {
+			bytes[i] = (bytes[i] >> (bitsToReset % 8)) << (bitsToReset % 8)
 		}
 	}
-	return result
+	return bytes
 }
 
 func (p *Puzzle) Solve() (*Solution, error) {
@@ -101,11 +99,8 @@ func increment(bytes []byte) []byte {
 	return bytes
 }
 
-func (s *Solution) IsValid(secret []byte, timeout time.Duration) bool {
+func (s *Solution) IsValid(secret []byte) bool {
 	if !bytes.Equal(s.HashOne, calculateHashOne(s.Timestamp, secret)) {
-		return false
-	}
-	if s.Timestamp.Add(timeout).Before(time.Now()) {
 		return false
 	}
 	return true

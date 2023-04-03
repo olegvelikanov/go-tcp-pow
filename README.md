@@ -49,5 +49,5 @@ It also contains methods for serialization/deserialization of contract messages
 ### How to run
 ```
 $ docker-compose up --detach --build
-$ docker-compuse run client
+$ docker-compose run client
 ```

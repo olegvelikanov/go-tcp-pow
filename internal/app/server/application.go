@@ -3,15 +3,16 @@ package server
 import (
 	cryptorand "crypto/rand"
 	"fmt"
+	"github.com/benbjohnson/clock"
 	"github.com/olegvelikanov/go-tcp-pow/internal/pkg/pow"
 	"math/rand"
 	"time"
 )
 
 type Application interface {
-	onChallengeRequest() *pow.Puzzle
+	OnChallengeRequest() *pow.Puzzle
 
-	onServiceRequest(solution *pow.Solution) ([]byte, error)
+	OnServiceRequest(solution *pow.Solution) ([]byte, error)
 }
 
 type App struct {
@@ -19,6 +20,7 @@ type App struct {
 	challengeDifficulty uint8
 	challengeTimeout    time.Duration
 	quotes              []string
+	clock               clock.Clock
 }
 
 func NewApp(config *Config) (*App, error) {
@@ -31,16 +33,21 @@ func NewApp(config *Config) (*App, error) {
 		challengeDifficulty: config.Difficulty,
 		challengeTimeout:    config.ChallengeTimeout,
 		quotes:              config.Quotes,
+		clock:               clock.New(),
 	}, nil
 }
 
-func (w *App) onChallengeRequest() *pow.Puzzle {
-	return pow.NewPuzzle(w.challengeDifficulty, w.challengeSecret)
+func (w *App) OnChallengeRequest() *pow.Puzzle {
+	return pow.NewPuzzle(w.challengeDifficulty, w.challengeSecret, w.clock)
 }
 
-func (w *App) onServiceRequest(solution *pow.Solution) ([]byte, error) {
-	if !solution.IsValid(w.challengeSecret, w.challengeTimeout) {
+func (w *App) OnServiceRequest(solution *pow.Solution) ([]byte, error) {
+	if !solution.IsValid(w.challengeSecret) {
 		return nil, fmt.Errorf("invalid solution")
+	}
+
+	if solution.Timestamp.Add(w.challengeTimeout).Before(w.clock.Now()) {
+		return nil, fmt.Errorf("solution timeout")
 	}
 
 	return []byte(w.pickRandomQuote()), nil
