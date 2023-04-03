@@ -3,14 +3,14 @@ package server
 import (
 	"errors"
 	"fmt"
-	"github.com/olegvelikanov/word-of-wisdom/internal/pkg/contract"
-	contractpb "github.com/olegvelikanov/word-of-wisdom/internal/pkg/contract/pb"
+	"github.com/olegvelikanov/go-tcp-pow/internal/pkg/contract"
+	"io"
 	"log"
 	"net"
 )
 
 const (
-	connReadBufSize = 2 * 1024
+	connReadBufSize = 512
 )
 
 type Server struct {
@@ -30,7 +30,7 @@ func StartServer(port int) (*Server, error) {
 		app:      NewWordOfWisdomApp(),
 	}
 	go s.serve()
-	log.Printf("Started tcp server serving at %d", s.port)
+	log.Printf("started tcp server serving at %d", s.port)
 	return s, nil
 }
 
@@ -41,7 +41,7 @@ func (s *Server) serve() {
 			if errors.Is(err, net.ErrClosed) {
 				return
 			}
-			log.Printf("Error accepting connection: %s", err)
+			log.Printf("error accepting connection: %s", err)
 			continue
 		}
 		go s.serveConnection(conn)
@@ -51,90 +51,94 @@ func (s *Server) serve() {
 func (s *Server) serveConnection(conn net.Conn) {
 	defer func() {
 		conn.Close()
-		log.Printf("Connection closed: %s", conn.RemoteAddr())
+		log.Printf("connection closed: %s", conn.RemoteAddr())
 	}()
-	log.Printf("Connection established: %s", conn.RemoteAddr())
+	log.Printf("connection established: %s", conn.RemoteAddr())
 
-	buf := make([]byte, connReadBufSize)
+	bufPtr := s.getBuf()
+	defer s.freeBuf(bufPtr)
+	buf := *bufPtr
+
 	for {
-		n, err := conn.Read(buf)
-		if n == 0 {
+		_, err := conn.Read(buf)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				log.Printf("client sent EOF")
+			} else {
+				log.Printf("error reading message: %s", err)
+			}
 			return
 		}
+		err = s.handleMessage(conn, buf)
 		if err != nil {
-			log.Printf("Error reading from connection(%s): %s", conn.RemoteAddr(), err)
-			break
+			log.Printf("error handling message: %s", err)
+			return
 		}
-		s.handleMessage(conn, buf[:n])
 	}
 }
 
-func (s *Server) handleMessage(conn net.Conn, m []byte) {
-	message, err := contract.Deserialize(m)
+func (s *Server) handleMessage(conn net.Conn, buf []byte) error {
+	message, err := contract.Deserialize(buf)
 	if err != nil {
-		log.Printf("Can't deserialize message: %s", err)
-		return
+		return fmt.Errorf("deserializing message: %s", err)
 	}
 
-	switch message.Body.(type) {
-	case *contractpb.Message_ChallengeRequest:
-		s.onChallengeRequest(conn, message.Body.(*contractpb.Message_ChallengeRequest))
-	case *contractpb.Message_ServiceRequest:
-		s.onServiceRequest(conn, message.Body.(*contractpb.Message_ServiceRequest))
+	switch msg := message.(type) {
+	case *contract.ChallengeRequest:
+		return s.onChallengeRequest(conn, buf, msg)
+	case *contract.ServiceRequest:
+		return s.onServiceRequest(conn, buf, msg)
 	default:
-
+		return fmt.Errorf("unexpected message received")
 	}
 }
 
-func (s *Server) onChallengeRequest(conn net.Conn, _ *contractpb.Message_ChallengeRequest) {
+func (s *Server) onChallengeRequest(conn net.Conn, buf []byte, _ *contract.ChallengeRequest) error {
+	log.Printf("challenge requested")
 	puzzle := s.app.onChallengeRequest()
-	bytes, err := contract.Serialize(&contractpb.Message{
-		Body: &contractpb.Message_ChallengeResponse{
-			ChallengeResponse: &contractpb.ChallengeResponse{
-				Puzzle: contract.ConvPuzzleToPb(puzzle),
-			},
-		},
-	})
-	if err != nil {
-		log.Printf("Can't serialize message: %s", err)
-		return
-	}
-	_, err = conn.Write(bytes)
-	if err != nil {
-		log.Printf("Can't write message to connection: %s", err)
-		return
-	}
+	return s.sendResponse(conn, buf, &contract.ChallengeResponse{Puzzle: puzzle})
 }
 
-func (s *Server) onServiceRequest(conn net.Conn, request *contractpb.Message_ServiceRequest) {
-	quote, err := s.app.onServiceRequest(contract.ConvPuzzleSolutionFromPb(request.ServiceRequest.PuzzleSolution))
+func (s *Server) onServiceRequest(conn net.Conn, buf []byte, request *contract.ServiceRequest) error {
+	log.Printf("service requested")
+	quote, err := s.app.onServiceRequest(request.PuzzleSolution)
 	if err != nil {
-		log.Printf("Error processing service request: %s", err)
+		return fmt.Errorf("requesting service: %s", err)
 	}
-	bytes, err := contract.Serialize(&contractpb.Message{
-		Body: &contractpb.Message_ServiceResponse{
-			ServiceResponse: &contractpb.ServiceResponse{
-				Quote: quote,
-			},
-		},
-	})
+	return s.sendResponse(conn, buf, &contract.ServiceResponse{Quote: quote})
+}
+
+func (s *Server) sendResponse(conn net.Conn, buf []byte, message contract.Message) error {
+	n, err := contract.Serialize(
+		message,
+		buf,
+	)
 	if err != nil {
-		log.Printf("Can't serialize message: %s", err)
-		return
+		return fmt.Errorf("serializing message: %s", err)
 	}
-	_, err = conn.Write(bytes)
+	_, err = conn.Write(buf[:n])
 	if err != nil {
-		log.Printf("Can't write message to connection: %s", err)
-		return
+		return fmt.Errorf("writing message to connection: %s", err)
 	}
+	return nil
 }
 
 func (s *Server) Stop() {
-	log.Printf("Stopping tcp server")
+	log.Printf("stopping tcp server")
 	err := s.listener.Close()
 	if err != nil {
-		log.Printf("Can't stop tcp server: %s", err)
+		log.Printf("can't stop tcp server: %s", err)
 		return
 	}
-	log.Printf("Server is stopped")
+	log.Printf("server is stopped")
+}
+
+// TODO: use sync.Pool here
+
+func (s *Server) getBuf() *[]byte {
+	bytes := make([]byte, connReadBufSize)
+	return &bytes
+}
+func (s *Server) freeBuf(ptr *[]byte) {
+
 }

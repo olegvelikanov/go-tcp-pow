@@ -3,9 +3,9 @@ package pow
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"hash"
-	"strconv"
 	"time"
 )
 
@@ -13,31 +13,34 @@ var ErrSolutionNotFound = fmt.Errorf("puzzle solution not found")
 
 type Puzzle struct {
 	Timestamp        time.Time
-	CoveredPreImage  []byte
-	CoveredBitsCount int
-	Hash             []byte
+	CoveredHashOne   []byte
+	CoveredBitsCount uint8
+	HashTwo          []byte
 }
 
 type Solution struct {
 	Timestamp time.Time
-	PreImage  []byte
+	HashOne   []byte
 }
 
-func NewPuzzle(bitsCount int, secret []byte) *Puzzle {
+func NewPuzzle(bitsCount uint8, secret []byte) *Puzzle {
 	timestamp := time.Now()
-	preImage := calculatePreImage(timestamp, secret)
-	hash := calculateHash(preImage)
+	hashOne := calculateHashOne(timestamp, secret)
+	hashTwo := calculateHash(hashOne)
 
 	return &Puzzle{
 		Timestamp:        timestamp,
-		CoveredPreImage:  coverTrailingBits(preImage, bitsCount),
+		CoveredHashOne:   coverTrailingBits(hashOne, int(bitsCount)),
 		CoveredBitsCount: bitsCount,
-		Hash:             hash,
+		HashTwo:          hashTwo,
 	}
 }
 
-func calculatePreImage(timestamp time.Time, secret []byte) []byte {
-	return calculateHash([]byte(strconv.Itoa(timestamp.Nanosecond())), secret)
+func calculateHashOne(timestamp time.Time, secret []byte) []byte {
+	ts := make([]byte, 16)
+	binary.LittleEndian.PutUint64(ts[0:8], uint64(timestamp.Unix()))
+	binary.LittleEndian.PutUint64(ts[8:16], uint64(timestamp.Nanosecond()))
+	return calculateHash(ts, secret)
 }
 
 func calculateHash(args ...[]byte) []byte {
@@ -64,17 +67,17 @@ func coverTrailingBits(original []byte, bitsToReset int) []byte {
 }
 
 func (p *Puzzle) Solve() (*Solution, error) {
-	preImage := make([]byte, len(p.CoveredPreImage))
-	copy(preImage, p.CoveredPreImage)
+	hashOne := make([]byte, len(p.CoveredHashOne))
+	copy(hashOne, p.CoveredHashOne)
 	found := false
 
 	n := 2 << p.CoveredBitsCount
 	for i := 0; i < n; i++ {
-		if bytes.Equal(p.Hash, calculateHash(preImage)) {
+		if bytes.Equal(p.HashTwo, calculateHash(hashOne)) {
 			found = true
 			break
 		}
-		increment(preImage)
+		increment(hashOne)
 	}
 	if !found {
 		return nil, ErrSolutionNotFound
@@ -82,7 +85,7 @@ func (p *Puzzle) Solve() (*Solution, error) {
 
 	return &Solution{
 		Timestamp: p.Timestamp,
-		PreImage:  preImage,
+		HashOne:   hashOne,
 	}, nil
 }
 
@@ -99,7 +102,7 @@ func increment(bytes []byte) []byte {
 }
 
 func (s *Solution) IsValid(secret []byte, timeout time.Duration) bool {
-	if !bytes.Equal(s.PreImage, calculatePreImage(s.Timestamp, secret)) {
+	if !bytes.Equal(s.HashOne, calculateHashOne(s.Timestamp, secret)) {
 		return false
 	}
 	if s.Timestamp.Add(timeout).Before(time.Now()) {

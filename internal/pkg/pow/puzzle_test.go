@@ -25,7 +25,7 @@ func TestPuzzle_Solve(t *testing.T) {
 
 	t.Run("should return error for unsolvable puzzle", func(t *testing.T) {
 		puzzle := NewPuzzle(24, secret)
-		puzzle.Hash = make([]byte, len(puzzle.Hash))
+		puzzle.HashTwo = make([]byte, len(puzzle.HashTwo))
 		solution, err := puzzle.Solve()
 		require.Nil(t, solution)
 		assert.Errorf(t, err, "puzzle solution not found")
@@ -38,7 +38,7 @@ func TestSolution_IsValid(t *testing.T) {
 	t.Run("should return true for valid solution", func(t *testing.T) {
 		solution := &Solution{
 			Timestamp: timestamp,
-			PreImage:  calculatePreImage(timestamp, []byte("secret")),
+			HashOne:   calculateHashOne(timestamp, []byte("secret")),
 		}
 		assert.True(t, solution.IsValid([]byte("secret"), duration))
 	})
@@ -48,7 +48,7 @@ func TestSolution_IsValid(t *testing.T) {
 		loc2 := time.FixedZone("loc2", 3)
 		solution := &Solution{
 			Timestamp: timestamp.In(loc1),
-			PreImage:  calculatePreImage(timestamp.In(loc2), []byte("secret")),
+			HashOne:   calculateHashOne(timestamp.In(loc2), []byte("secret")),
 		}
 		assert.True(t, solution.IsValid([]byte("secret"), duration))
 	})
@@ -56,7 +56,7 @@ func TestSolution_IsValid(t *testing.T) {
 	t.Run("should return false for invalid solution", func(t *testing.T) {
 		solution := &Solution{
 			Timestamp: timestamp,
-			PreImage:  increment(calculatePreImage(timestamp, []byte("secret"))),
+			HashOne:   increment(calculateHashOne(timestamp, []byte("secret"))),
 		}
 		assert.False(t, solution.IsValid([]byte("secret"), duration))
 	})
@@ -64,7 +64,7 @@ func TestSolution_IsValid(t *testing.T) {
 	t.Run("should return false on timeout", func(t *testing.T) {
 		solution := &Solution{
 			Timestamp: timestamp.Add(24 * time.Hour),
-			PreImage:  increment(calculatePreImage(timestamp, []byte("secret"))),
+			HashOne:   increment(calculateHashOne(timestamp, []byte("secret"))),
 		}
 		assert.False(t, solution.IsValid([]byte("secret"), duration))
 	})

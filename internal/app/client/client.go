@@ -2,108 +2,89 @@ package client
 
 import (
 	"fmt"
-	"github.com/olegvelikanov/word-of-wisdom/internal/pkg/contract"
-	contractpb "github.com/olegvelikanov/word-of-wisdom/internal/pkg/contract/pb"
-	"github.com/olegvelikanov/word-of-wisdom/internal/pkg/pow"
-	"google.golang.org/protobuf/proto"
+	"github.com/olegvelikanov/go-tcp-pow/internal/pkg/contract"
+	"github.com/olegvelikanov/go-tcp-pow/internal/pkg/pow"
 	"log"
 	"net"
 )
 
 const (
-	connReadBufSize = 2 * 1024
+	connReadBufSize = 512
 )
 
 var buf = make([]byte, connReadBufSize)
 
-func FetchQuote(port int) {
+func FetchQuote(port int) ([]byte, error) {
 	conn, err := net.Dial("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		log.Printf("failed to connect: %s", err)
-		return
+		return nil, fmt.Errorf("connecting to remote: %s", err)
 	}
 	log.Printf("connected")
 
 	challenge, err := requestChallenge(conn)
 	if err != nil {
-		log.Printf("Can't request challenge: %s", err)
-		return
+		return nil, fmt.Errorf("requesting a challenge: %s", err)
 	}
+
 	solution, err := challenge.Solve()
 	if err != nil {
-		log.Printf("Can't solve the challenge: %s", err)
-		return
+		return nil, fmt.Errorf("solving the challenge: %s", err)
 	}
 
-	quote, err := requestService(conn, solution)
-	if err != nil {
-		log.Printf("Can't request quote: %s", err)
-		return
-	}
-
-	log.Printf("RECEIVED QUOTE: %s", quote)
+	return requestService(conn, solution)
 }
 
 func requestChallenge(conn net.Conn) (*pow.Puzzle, error) {
-	request := &contractpb.Message{
-		Body: &contractpb.Message_ChallengeRequest{
-			ChallengeRequest: &contractpb.ChallengeRequest{},
-		},
-	}
-	bytes, err := proto.Marshal(request)
+	request := &contract.ChallengeRequest{}
+	n, err := contract.Serialize(request, buf)
 	if err != nil {
-		return nil, fmt.Errorf("can't marshall challenge request: %s", err)
+		return nil, fmt.Errorf("serializing challenge request: %s", err)
 	}
-	_, err = conn.Write(bytes)
+	_, err = conn.Write(buf[:n])
 	if err != nil {
-		return nil, fmt.Errorf("can't write to connection: %s", err)
+		return nil, fmt.Errorf("writing to connection: %s", err)
 	}
 
-	n, err := conn.Read(buf)
+	_, err = conn.Read(buf)
 	if err != nil {
-		return nil, fmt.Errorf("can't read from connection: %s", err)
+		return nil, fmt.Errorf("reading from connection: %s", err)
 	}
-	message := &contractpb.Message{}
-	err = proto.Unmarshal(buf[:n], message)
+	message, err := contract.Deserialize(buf)
 	if err != nil {
-		return nil, fmt.Errorf("can't unmarshall challenge response: %s", err)
+		return nil, fmt.Errorf("unmarshalling challenge response: %s", err)
 	}
-	challengeResponse, ok := message.Body.(*contractpb.Message_ChallengeResponse)
+	challengeResponse, ok := message.(*contract.ChallengeResponse)
 	if !ok {
 		return nil, fmt.Errorf("unexpected message type")
 	}
-	return contract.ConvPuzzleFromPb(challengeResponse.ChallengeResponse.Puzzle), nil
+
+	return challengeResponse.Puzzle, nil
 }
 
-func requestService(conn net.Conn, solution *pow.Solution) (string, error) {
-	request := &contractpb.Message{
-		Body: &contractpb.Message_ServiceRequest{
-			ServiceRequest: &contractpb.ServiceRequest{
-				PuzzleSolution: contract.ConvPuzzleSolutionToPb(solution),
-			},
-		},
-	}
-	bytes, err := proto.Marshal(request)
+func requestService(conn net.Conn, solution *pow.Solution) ([]byte, error) {
+	request := &contract.ServiceRequest{PuzzleSolution: solution}
+
+	n, err := contract.Serialize(request, buf)
 	if err != nil {
-		return "", fmt.Errorf("can't marshall service request: %s", err)
+		return nil, fmt.Errorf("serializing service request: %s", err)
 	}
-	_, err = conn.Write(bytes)
+	_, err = conn.Write(buf[:n])
 	if err != nil {
-		return "", fmt.Errorf("can't write to connection: %s", err)
+		return nil, fmt.Errorf("writing to connection: %s", err)
 	}
 
-	n, err := conn.Read(buf)
+	_, err = conn.Read(buf)
 	if err != nil {
-		return "", fmt.Errorf("can't read from connection: %s", err)
+		return nil, fmt.Errorf("reading from connection: %s", err)
 	}
-	message := &contractpb.Message{}
-	err = proto.Unmarshal(buf[:n], message)
+	message, err := contract.Deserialize(buf)
 	if err != nil {
-		return "", fmt.Errorf("can't unmarshall challenge response: %s", err)
+		return nil, fmt.Errorf("unmarshalling challenge response: %s", err)
 	}
-	serviceResponse, ok := message.Body.(*contractpb.Message_ServiceResponse)
+	serviceResponse, ok := message.(*contract.ServiceResponse)
 	if !ok {
-		return "", fmt.Errorf("unexpected message type")
+		return nil, fmt.Errorf("unexpected message type")
 	}
-	return serviceResponse.ServiceResponse.Quote, nil
+
+	return serviceResponse.Quote, nil
 }

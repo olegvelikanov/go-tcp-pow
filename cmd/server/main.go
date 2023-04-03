@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/olegvelikanov/word-of-wisdom/internal/app/server"
+	"github.com/olegvelikanov/go-tcp-pow/internal/app/server"
 	"log"
 	"os"
 	"os/signal"

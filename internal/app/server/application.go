@@ -2,7 +2,7 @@ package server
 
 import (
 	"fmt"
-	"github.com/olegvelikanov/word-of-wisdom/internal/pkg/pow"
+	"github.com/olegvelikanov/go-tcp-pow/internal/pkg/pow"
 	"math/rand"
 	"time"
 )
@@ -10,12 +10,12 @@ import (
 type Application interface {
 	onChallengeRequest() *pow.Puzzle
 
-	onServiceRequest(solution *pow.Solution) (string, error)
+	onServiceRequest(solution *pow.Solution) ([]byte, error)
 }
 
 type WordOfWisdomApp struct {
 	challengeSecret     []byte
-	challengeDifficulty int
+	challengeDifficulty uint8
 	challengeTimeout    time.Duration
 	quotes              []string
 }
@@ -33,12 +33,12 @@ func (w *WordOfWisdomApp) onChallengeRequest() *pow.Puzzle {
 	return pow.NewPuzzle(w.challengeDifficulty, w.challengeSecret)
 }
 
-func (w *WordOfWisdomApp) onServiceRequest(solution *pow.Solution) (string, error) {
+func (w *WordOfWisdomApp) onServiceRequest(solution *pow.Solution) ([]byte, error) {
 	if !solution.IsValid(w.challengeSecret, w.challengeTimeout) {
-		return "", fmt.Errorf("invalid solution")
+		return nil, fmt.Errorf("invalid solution")
 	}
 
-	return w.pickRandomQuote(), nil
+	return []byte(w.pickRandomQuote()), nil
 }
 
 func (w *WordOfWisdomApp) pickRandomQuote() string {
